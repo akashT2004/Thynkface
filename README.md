@@ -100,7 +100,3 @@ ThynkFace tracks specific behaviors to ensure monitoring integrity:
 **Session Termination**: If a user accumulates **3 warnings**, the session is automatically closed for security.
 
 ---
-
-## 📄 License
-
-This project is licensed under the MIT License.
