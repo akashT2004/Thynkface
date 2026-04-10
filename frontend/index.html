@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ThynkFace – Live Test</title>
+  <style>
+    body {
+      background: #111;
+      color: white;
+      text-align: center;
+      font-family: Arial;
+    }
+    video {
+      border: 3px solid lime;
+      margin-top: 20px;
+    }
+    pre {
+      background: #222;
+      padding: 10px;
+      width: 70%;
+      margin: 10px auto;
+      text-align: left;
+      min-height: 200px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+<h2>📷 ThynkFace – Live Test</h2>
+
+<video id="video" width="480" height="360" autoplay></video>
+<canvas id="canvas" width="480" height="360" style="display:none;"></canvas>
+
+<div>
+  <button onclick="stopSession()"> Stop Session</button>
+</div>
+
+<pre id="output">Starting session...</pre>
+
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const output = document.getElementById("output");
+
+let ws = null;
+let sessionId = null;
+let sendInterval = null;
+
+// ----------------------
+// CAMERA
+// ----------------------
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => {
+    video.srcObject = stream;
+  })
+  .catch(err => {
+    output.textContent = "Camera error: " + err;
+  });
+
+// ----------------------
+// START SESSION
+// ----------------------
+async function startSession() {
+  const res = await fetch("http://127.0.0.1:8000/session/start", {
+    method: "POST"
+  });
+
+  const data = await res.json();
+  sessionId = data.session_id;
+
+  output.textContent = " Session started:\n" + sessionId;
+  connectWebSocket();
+}
+
+// ----------------------
+// WEBSOCKET
+// ----------------------
+function connectWebSocket() {
+  console.log("🔗 Connecting to WS with session:", sessionId);
+
+  ws = new WebSocket(
+    `ws://127.0.0.1:8000/ws?session_id=${sessionId}`
+  );
+
+  ws.onopen = () => {
+    console.log("✅ WebSocket connected");
+    sendInterval = setInterval(sendFrame, 1000);
+  };
+
+  ws.onerror = (e) => {
+    console.error("❌ WebSocket error", e);
+  };
+
+  ws.onclose = () => {
+    console.warn("⚠️ WebSocket closed");
+    clearInterval(sendInterval);
+  };
+
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    output.textContent = JSON.stringify(data, null, 2);
+  };
+}
+
+// ----------------------
+// SEND FRAMES
+// ----------------------
+function sendFrame() {
+  if (!ws || ws.readyState !== 1) return;
+  if (!video.videoWidth) return;
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
+  ws.send(base64);
+}
+
+// ----------------------
+// STOP SESSION (FINAL REPORT)
+// ----------------------
+async function stopSession() {
+  if (ws) ws.close();
+
+  const res = await fetch(
+    `http://127.0.0.1:8000/session/end?session_id=${sessionId}`,
+    { method: "POST" }
+  );
+
+  const report = await res.json();
+
+  output.textContent =
+    " FINAL REPORT\n\n" +
+    JSON.stringify(report, null, 2);
+}
+
+// 🚀 Auto start
+startSession();
+</script>
+
+</body>
+</html>
